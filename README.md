@@ -58,12 +58,26 @@ class FacebookTestCase(unittest.TestCase):
     except facebook.GraphAPIError as error:
       self.assertEqual(error.message, expected_regexp)
       
-  def create_test_users():
+  def create_test_users(self, app_id, graph, amount):
+    for i in range(amount):
+      u = graph.request(
+        app_id + "/accounts/test-users", {}, {}, method="POST"
+      )
+      self.test_users.append(u)
   
-  def create_friend_connections():
-  
-  
-  
+  def create_friend_connections(self, user, friends):
+    user_graph = facebook.GraphAPI(user["access_token"])
+    
+    for friend in friends:
+      if user["id"] == friend["id"]:
+        continue
+      user_graph.request(
+        user["id"] + "/friends/" + friend["id"], {}, {}, method="POST"
+      )
+      respondent_graph = facebook.GraphAPI(friend["access_token"])
+      respondent_graph.request(
+        friend["id"] + "/friends/" + user["id"], {}, {}, method="POST"
+      )
 
 class TestGetAppAccessToken(FacebookTestCase):
 
