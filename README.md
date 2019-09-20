@@ -21,6 +21,49 @@ except ImportError:
   import mock
 
 class FacebookTestCase(unittest.TestCase):
+  
+  def setUp(self):
+    try:
+      self.app_id = os.environ["FACEBOOK_APP_ID"]
+      self.secret = os.environ["FACEBOOK_SECRET"]
+    except KeyError:
+      raise Exception(
+        "FACEBOOK_APP_ID and FACEBOOK_SECRET "
+        "must be set as environmental variables."
+      )
+    
+    self.test_users = []
+    
+  def tearDown(self):
+    token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, True
+    )
+    graph = facebook.GraphAPI(token)
+    
+    for user in self.test_users:
+      graph.request(user["id"], {}, None, method="DELETE")
+    del self.test_users[:]
+  
+  def assert_raises_multi_regex(
+    self,
+    expected_exception,
+    expected_regexp,
+    callable_obj=None,
+    *args,
+    **kwargs
+  ):
+    self.assertRaises(expected_exception, callable_obj, *args, **kwargs)
+    try:
+      callable_obj(*args)
+    except facebook.GraphAPIError as error:
+      self.assertEqual(error.message, expected_regexp)
+      
+  def create_test_users():
+  
+  def create_friend_connections():
+  
+  
+  
 
 class TestGetAppAccessToken(FacebookTestCase):
 
