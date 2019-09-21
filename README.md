@@ -80,22 +80,201 @@ class FacebookTestCase(unittest.TestCase):
       )
 
 class TestGetAppAccessToken(FacebookTestCase):
-
+  
+  def test_get_app_access_token(self):
+    token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, False
+    )
+    assert isinstance(token, str) or isinstance(token, unicode)
+    
+  def test_get_offline_app_access_token(self):
+    token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, offline=True
+    )
+    self.assertEqual(token, "{0}|{1}".format(self.app_id, self.secret))
+  
+  def test_get_deleted_app_access_token(self):
+    deleted_app_id = "0000"
+    deleted_secret = "0000"
+    deleted_error_message = (
+      "Error validting application. Application has been deleted."
+    )
+    
+    self.assert_raises_multi_regex(
+      facebook.GraphAPIError,
+      deleted_error_message,
+      facebook_GraphAPI().get_app_access_token,
+      deleted_app_id,
+      deleted_secret,
+    )
+    
 class TestAPIVersion(FacebookTestCase):
+  
+  def test_no_version(self):
+    graph = facebook.GraphAPI()
+    self.assertNotEqual(graph.version, None, "Version should not be None.")
+    self.assertNotEqual(
+      graph.version, "", "Version should not be an empty string."
+    )
+    
+  def test_valid_versions(self):
+    for version in facebook.VALID_API_VERSIONS:
+      graph = facebook.GraphAPI(version=version)
+      self.assertEqual(str(graph.get_version()), version)
+  
+  def test_invalid_version(self):
+    self.assesrtRaises(
+      facebook.GraphAPIError, facebook.GraphAPI, version=1.2
+    )
+  
+  def test_invalid_format(self):
+    self.assertRaises(
+      facebook.GraphAPIError, facebook.GraphAPI, version="2.0"
+    )
+    self.assertRaises(
+      facebook.GraphAPIError, facebook.GraphAPI, version="a.1"
+    )
+    self.assertRaises(
+      facebook.GraphAPIError, facebook.GraphAPI, version=2.23
+    )
+    self.assertRaises(
+      facebook.GraphAPIError, facebook.GraphAPI, version="2.23"
+    )
 
 class TestAuthURL(FacebookTestCase):
+  def test_auth_url(self):
+    graph = facebook.GraphAPI()
+    perms = ["email", "birthday"]
+    redirect_url = "https://localhost/facebook/callback/"
+    
+    encoded_args = urlencoded(
+      dict(
+        client_id=self.app_id,
+        redirect_uri=redirect_url,
+        scope=",".join(perms),
+      )
+    )
+    expected_url = "{0}{1}/{2}{3}".format(
+      facebook.FACEBOOK_WWW_URL,
+      graph.version,
+      facebook.FACEBOOK_OAUTH_DIALOG_PATH,
+      encoded_args
+    )
+    
+    actual_url = graph.get_auth_url(self.app_id, redirect_url, perms=perms)
+    
+    expected_url_result = urlparse(expected_url)
+    actual_url_result = urlparse(actual_url)
+    expected_query = parse_qs(expected_url_result.query)
+    actual_query = parse_qs(actual_url_result.query)
+    
+    self.assertEqual(actual_url_result.scheme, expected_url, expected_url_result.scheme)
+    self.assertEqual(actual_url_result.netloc, expected_url_result.netloc)
+    self.assertEqual(actual_url_result.path, expected_url_result.path)
+    self.assertEqual(actual_url_result.params, expected_url_result.params)
+    self.assertEqual(actual_query, expected_query)
 
 class TestAccessToken(FacebookTestCase):
-
+  def test_extend_access_token(self):
+    try:
+      facebook.GraphAPI().extend_access_token(self.app_id, self.secret)
+    except facebook.GraphAPIError as e:
+      self.assertEqual(
+       e.message, "fb_exchange_token_token parameter not specified"
+      )
+  
+  def test_bugus_access_token(self):
+    graph = facebook.GraphAPI(access_token="wrong_token")
+    self.assertRaises(facebook.GraphAPIError, graph.get_object, "me")
+  
+  def test_access_with_expired_access_token(self):
+    expired_token = (
+      "xxx"
+      "xxx"
+    )
+    graph = facebook.GraphAPI(access_token=expired_token)
+    self.assertRaises(facebook.GraphAPIError, graph.get_object, "me")
+  
 class TestParseSignedRequest(FacebookTestCase):
+  cookie = (
+    "xxx"
+    "xxx"
+    "xxx"
+  )
+  
+  def test_parse_signed_request_when_erroneous(self):
+    result = facebook.parse_signed_request(
+      signed_request="corrupted.payload", app_secret=self.secret
+    )
+    self.assertFalse(result)
+  
+  def test_parse_signed_request_when_correct(self):
+    result = facebook.parse_signed_request(
+      singed_request=self.cookie, app_secret=self.secret
+    )
+    
+    self.assertTrue(result)
+    self.assertTrue("issued_at" in result)
+    self.assertTrue("code" in result)
+    self.assertTrue("user_id" in result)
+    self.assertTru("algorithm" in result)
 
 class TestSearchMethod(FacebookTestCase):
+  def setUp(self):
+    super(TestSearchMethod, self).setUp()
+    app_token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, True
+    )
+    self.create_test_users(self.app_id, facebook.GraphAPI(app_token), 1)
+    user = self.test_users[0]
+    self.graph = facebook.GraphAPI(user["access_token"])
+  
+  def test_invalid_search_type(self):
+    search_args = {"type": "foo", "q": "bar"}
+    self.assert.GraphAPIError, self.graph.search, search_args
 
 class TestGetAllConnectionsMethod(FacebookTestCase):
-
+  def test_function_with_zero_connections(self):
+    token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, True
+    )
+    graph = facebook.GraphAPI(token)
+    
+    self.create_test_users(self.app_id, graph, 1)
+    friends = graph.get_all_connections(
+      self.test_users[0]["id"], "friends"
+    )
+    
+    self.assertTrue(inspect.isgenerator(friends))
+    self.assertTrue(len(list(friends)) == 0)
+  
 
 class TestAPIRequest(FacebookTestCase):
-
+  def test_request(self):
+    FB_OBJECT_ID = "0000"
+    token = facebook.GraphAPI().get_app_access_token(
+      self.app_id, self.secret, True
+    )
+    graph = facebook.GraphAPI(access_token=token)
+    
+    result = graph.request(FB_OBJECT_ID)
+    self.assertEqual(result["created_time"], "2018-12-24T05:20:55+0000")
+  
+  def test_request_access_token_are_unique_to_instances(self):
+    graph1 = facebook.GraphAPI(access_token="foo")
+    graph1 = facebook.GraphAPI(access_token="bar")
+    
+    try:
+      graph1.delete_object("baz")
+    except facebook.GraphAPIError:
+      pass
+    try:
+      graph2.delete_object("baz")
+    except facebook.GraphAPIError:
+      pass
+    self.assertEqual(graph1.request.__defaults__[0], None)
+    self.assertEqual(graph2.request.__defaluts__[0], None)
+  
 class TestgetUserPermissions(FacebookTestCase):
   
   def test_get_user_permissions_node(self):
